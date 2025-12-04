@@ -8,12 +8,12 @@ import (
 
 	"github.com/julienschmidt/httprouter"
 	"github.com/shadowbane/home-tidal-flood-warning/pkg/models"
+	traits "github.com/shadowbane/home-tidal-flood-warning/pkg/traits/controller-traits"
 	"github.com/shadowbane/weather-alert/pkg/application"
 	weathermodels "github.com/shadowbane/weather-alert/pkg/models"
+	basetraits "github.com/shadowbane/weather-alert/pkg/traits/controller-traits"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
-
-	traits "github.com/shadowbane/weather-alert/pkg/traits/controller-traits"
 )
 
 // TidalFloodRisk represents the tidal flood risk assessment
@@ -66,7 +66,7 @@ func toResponse(detail weathermodels.AlertDetail, timezone string, floodRisk *Ti
 		WeatherAlertID:  detail.WeatherAlertID,
 		Identifier:      detail.Identifier,
 		Sender:          detail.Sender,
-		Sent:            traits.FormatTimeWithTimezone(detail.Sent, timezone),
+		Sent:            basetraits.FormatTimeWithTimezone(detail.Sent, timezone),
 		Status:          detail.Status,
 		MsgType:         detail.MsgType,
 		Scope:           detail.Scope,
@@ -77,8 +77,8 @@ func toResponse(detail weathermodels.AlertDetail, timezone string, floodRisk *Ti
 		Severity:        detail.Severity,
 		Certainty:       detail.Certainty,
 		EventCode:       detail.EventCode,
-		Effective:       traits.FormatTimeWithTimezone(detail.Effective, timezone),
-		Expires:         traits.FormatTimeWithTimezone(detail.Expires, timezone),
+		Effective:       basetraits.FormatTimeWithTimezone(detail.Effective, timezone),
+		Expires:         basetraits.FormatTimeWithTimezone(detail.Expires, timezone),
 		SenderName:      detail.SenderName,
 		Headline:        detail.Headline,
 		Description:     detail.Description,
@@ -86,8 +86,8 @@ func toResponse(detail weathermodels.AlertDetail, timezone string, floodRisk *Ti
 		Web:             detail.Web,
 		Contact:         detail.Contact,
 		AreaDescription: detail.AreaDescription,
-		CreatedAt:       traits.FormatTimeWithTimezone(detail.CreatedAt, timezone),
-		UpdatedAt:       traits.FormatTimeWithTimezone(detail.UpdatedAt, timezone),
+		CreatedAt:       basetraits.FormatTimeWithTimezone(detail.CreatedAt, timezone),
+		UpdatedAt:       basetraits.FormatTimeWithTimezone(detail.UpdatedAt, timezone),
 		TidalFloodRisk:  floodRisk,
 	}
 }
@@ -120,7 +120,7 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 	// Query tide data for high tides (>2.5m) within alert period + buffer
 	var tideData []models.TideData
 	result := db.Where("tide_type = ? AND height_m > ? AND tide_time >= ? AND tide_time <= ?",
-		models.TideTypeHigh, 2.5, alert.Effective, expiresWithBuffer).
+		models.TideTypeHigh, 2.6, alert.Effective, expiresWithBuffer).
 		Order("height_m DESC").
 		Find(&tideData)
 
@@ -135,12 +135,12 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 	}
 
 	if len(tideData) == 0 {
-		// No high tide > 2.5m during the alert period or buffer
+		// No high tide > 2.6m during the alert period or buffer
 		return &TidalFloodRisk{
 			HasRisk:   false,
 			RiskLevel: "none",
 			HeavyRain: hasHeavyRain,
-			Message:   "No tidal flood risk: No high tide (>2.5m) during or near alert period",
+			Message:   "No tidal flood risk: No high tide (>2.6m) during or near alert period",
 		}
 	}
 
@@ -157,11 +157,11 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 			TideTime:    highestTide.TideTime,
 			TideHeightM: highestTide.HeightM,
 			HeavyRain:   hasHeavyRain,
-			Message:     "MODERATE RISK: Heavy rain with high tide (>2.5m) shortly after - Sea level rising during alert period",
+			Message:     "MODERATE RISK: Heavy rain with high tide (>2.6m) shortly after - Sea level rising during alert period",
 		}
 	}
 
-	// High tide > 2.5m during the alert period with heavy rain = high risk
+	// High tide > 2.6m during the alert period with heavy rain = high risk
 	return &TidalFloodRisk{
 		HasRisk:     true,
 		RiskLevel:   "high",
@@ -169,7 +169,7 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 		TideTime:    highestTide.TideTime,
 		TideHeightM: highestTide.HeightM,
 		HeavyRain:   hasHeavyRain,
-		Message:     "HIGH RISK: Heavy rain expected during high tide (>2.5m) - Flash flood possible!",
+		Message:     "HIGH RISK: Heavy rain expected during high tide (>2.6m) - Flash flood possible!",
 	}
 }
 
@@ -234,15 +234,30 @@ func Index(app *application.Application) httprouter.Handle {
 			Find(&alertDetails)
 
 		if result.Error != nil {
-			traits.WriteErrorResponse(w, http.StatusInternalServerError, result.Error.Error())
+			basetraits.WriteErrorResponse(w, http.StatusInternalServerError, result.Error.Error())
 			return
 		}
 
 		// Handle card format response
 		if isCardMode {
 			if len(alertDetails) == 0 {
-				traits.WriteErrorResponse(w, http.StatusNotFound, "no alerts found")
+				basetraits.WriteErrorResponse(w, http.StatusNotFound, "no alerts found")
 				return
+			}
+
+			// Calculate flood risk for card
+			floodRisk := calculateTidalFloodRisk(app.DB, alertDetails[0])
+
+			// Convert to traits.TidalFloodRisk for card rendering
+			var cardFloodRisk *traits.TidalFloodRisk
+			if floodRisk != nil && floodRisk.HasRisk {
+				cardFloodRisk = &traits.TidalFloodRisk{
+					HasRisk:     floodRisk.HasRisk,
+					RiskLevel:   floodRisk.RiskLevel,
+					TideTime:    floodRisk.TideTime,
+					TideHeightM: floodRisk.TideHeightM,
+					Message:     floodRisk.Message,
+				}
 			}
 
 			card := traits.AlertCardData{
@@ -252,6 +267,8 @@ func Index(app *application.Application) httprouter.Handle {
 				AreaDescription: alertDetails[0].AreaDescription,
 				Description:     alertDetails[0].Description,
 				Timezone:        timezone,
+				FloodRisk:       cardFloodRisk,
+				Location:        locationFilter,
 			}
 
 			switch asCard {
@@ -276,13 +293,13 @@ func Index(app *application.Application) httprouter.Handle {
 			totalPages++
 		}
 
-		pagination := traits.Pagination{
+		pagination := basetraits.Pagination{
 			Page:       page,
 			Limit:      limit,
 			Total:      total,
 			TotalPages: totalPages,
 		}
 
-		traits.WritePaginatedResponse(w, responses, pagination)
+		basetraits.WritePaginatedResponse(w, responses, pagination)
 	}
 }
