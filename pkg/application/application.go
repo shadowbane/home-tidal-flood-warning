@@ -43,7 +43,7 @@ func Start() (*Application, error) {
 		&weathermodels.WeatherAlert{},
 		&weathermodels.AlertDetail{},
 		// Tidal flood models (local)
-		&models.TidalFloodWarning{},
+		&models.TideData{},
 	}...)
 	if err != nil {
 		zap.S().Fatalf("Error running auto migration: %v", err)

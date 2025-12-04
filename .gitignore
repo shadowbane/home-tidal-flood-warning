@@ -1,0 +1,9 @@
+.env
+log/*.log
+bin/*
+main
+*.db
+/.idea
+/Temp
+/storage/logs/*.log
+httpClient/http-client.private.env.json
