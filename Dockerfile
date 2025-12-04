@@ -1,10 +1,10 @@
 # Stage 1: Build
-FROM golang:1.23 AS builder
+FROM golang:1.23-alpine AS builder
 
 LABEL maintainer="Adli I. Ifkar <adly.shadowbane@gmail.com>"
 
-# Install UPX
-RUN apt-get update && apt-get install -y --no-install-recommends upx && rm -rf /var/lib/apt/lists/*
+# Install build dependencies and UPX
+RUN apk add --no-cache git upx
 
 WORKDIR /build
 
@@ -17,17 +17,17 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build for linux amd64 (CGO enabled for SQLite support)
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/home-tidal-flood-warning cmd/api/main.go
+# Build for linux amd64 (CGO disabled - using pure-Go SQLite driver)
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/home-tidal-flood-warning cmd/api/main.go
 
 # Compress with UPX
 RUN upx --best --lzma bin/home-tidal-flood-warning
 
 # Stage 2: Runtime
-FROM debian:bookworm-slim
+FROM alpine:latest
 
 # Install ca-certificates for HTTPS requests
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
+RUN apk add --no-cache ca-certificates tzdata
 
 WORKDIR /app
 
