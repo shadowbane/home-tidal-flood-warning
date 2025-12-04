@@ -1,10 +1,10 @@
 # Stage 1: Build
-FROM golang:1.23-alpine AS builder
+FROM golang:1.23 AS builder
 
 LABEL maintainer="Adli I. Ifkar <adly.shadowbane@gmail.com>"
 
-# Install build dependencies (gcc, musl-dev for CGO/SQLite) and UPX
-RUN apk add --no-cache git upx gcc musl-dev
+# Install UPX
+RUN apt-get update && apt-get install -y --no-install-recommends upx && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
@@ -24,10 +24,10 @@ RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/home-
 RUN upx --best --lzma bin/home-tidal-flood-warning
 
 # Stage 2: Runtime
-FROM alpine:latest
+FROM debian:bookworm-slim
 
 # Install ca-certificates for HTTPS requests
-RUN apk add --no-cache ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates tzdata && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
