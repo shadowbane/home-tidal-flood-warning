@@ -57,6 +57,7 @@ func (f *TidalFloodFetcher) FetchAndStore() (int, error) {
 	// Use transaction to replace all data for the date
 	err = f.db.Transaction(func(tx *gorm.DB) error {
 		// Delete existing data for the same date and location
+		// Note: date is kept in WIB for correct logical date storage
 		if err := tx.Where("location = ? AND date = ?", TideLocation, date).
 			Delete(&models.TideData{}).Error; err != nil {
 			return fmt.Errorf("failed to delete existing tide data: %w", err)
@@ -116,12 +117,14 @@ func (f *TidalFloodFetcher) Fetch() ([]models.TideData, time.Time, error) {
 		return nil, time.Time{}, fmt.Errorf("could not find tide date header")
 	}
 
-	date, err := parseTideDate(dateText)
+	// dateForStorage: UTC midnight with correct Y/M/D (for DB storage)
+	// dateWIB: WIB midnight (for combining with tide times)
+	dateForStorage, dateWIB, err := parseTideDate(dateText)
 	if err != nil {
 		return nil, time.Time{}, fmt.Errorf("failed to parse tide date: %w", err)
 	}
 
-	zap.S().Debugf("Parsing tide data for date: %s", date.Format("2006-01-02"))
+	zap.S().Debugf("Parsing tide data for date: %s", dateForStorage.Format("2006-01-02"))
 
 	tideData := make([]models.TideData, 0)
 
@@ -152,8 +155,8 @@ func (f *TidalFloodFetcher) Fetch() ([]models.TideData, time.Time, error) {
 			return
 		}
 
-		// Parse time (format: "HH:MM")
-		tideTime, err := parseTimeWIB(date, timeStr)
+		// Parse time using WIB date (for correct hour/minute combination)
+		tideTime, err := parseTimeWIB(dateWIB, timeStr)
 		if err != nil {
 			zap.S().Warnf("Failed to parse tide time '%s': %v", timeStr, err)
 			return
@@ -168,9 +171,9 @@ func (f *TidalFloodFetcher) Fetch() ([]models.TideData, time.Time, error) {
 
 		data := models.TideData{
 			Location: TideLocation,
-			Date:     date,
+			Date:     dateForStorage, // UTC midnight with correct Y/M/D for DB
 			TideType: tideType,
-			TideTime: tideTime,
+			TideTime: tideTime, // Converted to UTC in parseTimeWIB for accurate comparisons
 			HeightM:  heightM,
 			HeightFt: heightFt,
 		}
@@ -182,8 +185,8 @@ func (f *TidalFloodFetcher) Fetch() ([]models.TideData, time.Time, error) {
 		return nil, time.Time{}, fmt.Errorf("no tide data found in the table")
 	}
 
-	zap.S().Infof("Fetched %d tide entries for %s", len(tideData), date.Format("2006-01-02"))
-	return tideData, date, nil
+	zap.S().Infof("Fetched %d tide entries for %s", len(tideData), dateForStorage.Format("2006-01-02"))
+	return tideData, dateForStorage, nil
 }
 
 // StartPeriodicFetch starts a background goroutine that fetches at 2-hour intervals aligned to UTC+7
@@ -250,26 +253,33 @@ func calculateNext2HourMark() time.Time {
 }
 
 // parseTideDate parses the date from text like "Tide Times for Sekupang: Thursday December 4, 2025 (WIB)"
-func parseTideDate(text string) (time.Time, error) {
+// Returns two values: dateForStorage (UTC midnight for DB) and dateWIB (for combining with times)
+func parseTideDate(text string) (dateForStorage time.Time, dateWIB time.Time, err error) {
 	// Extract date portion using regex
 	re := regexp.MustCompile(`(\w+)\s+(\w+)\s+(\d+),\s+(\d+)`)
 	matches := re.FindStringSubmatch(text)
 	if len(matches) < 5 {
-		return time.Time{}, fmt.Errorf("could not extract date from: %s", text)
+		return time.Time{}, time.Time{}, fmt.Errorf("could not extract date from: %s", text)
 	}
 
 	// Parse: "Thursday December 4, 2025"
 	dateStr := fmt.Sprintf("%s %s, %s", matches[2], matches[3], matches[4])
 	date, err := time.ParseInLocation("January 2, 2006", dateStr, wibTimezone)
 	if err != nil {
-		return time.Time{}, err
+		return time.Time{}, time.Time{}, err
 	}
 
-	// Return just the date part (midnight WIB)
-	return time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, wibTimezone), nil
+	// dateWIB: midnight in WIB timezone (for combining with tide times)
+	dateWIB = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, wibTimezone)
+
+	// dateForStorage: same Y/M/D but in UTC (so MySQL stores correct date)
+	dateForStorage = time.Date(date.Year(), date.Month(), date.Day(), 0, 0, 0, 0, time.UTC)
+
+	return dateForStorage, dateWIB, nil
 }
 
-// parseTimeWIB parses a time string like "03:12" and combines with the date in WIB
+// parseTimeWIB parses a time string like "03:12" and combines with the date in WIB,
+// then converts to UTC for consistent storage (required for SQLite compatibility)
 func parseTimeWIB(date time.Time, timeStr string) (time.Time, error) {
 	parts := strings.Split(timeStr, ":")
 	if len(parts) != 2 {
@@ -286,11 +296,13 @@ func parseTimeWIB(date time.Time, timeStr string) (time.Time, error) {
 		return time.Time{}, err
 	}
 
-	return time.Date(
+	// Create time in WIB, then convert to UTC for storage
+	wibTime := time.Date(
 		date.Year(), date.Month(), date.Day(),
 		hour, minute, 0, 0,
 		wibTimezone,
-	), nil
+	)
+	return wibTime.UTC(), nil
 }
 
 // parseHeight parses height string like "1.1 m (3.6 ft)" and returns meters and feet
