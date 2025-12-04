@@ -3,8 +3,8 @@ FROM golang:1.23-alpine AS builder
 
 LABEL maintainer="Adli I. Ifkar <adly.shadowbane@gmail.com>"
 
-# Install build dependencies and UPX
-RUN apk add --no-cache git upx
+# Install build dependencies (gcc, musl-dev for CGO/SQLite) and UPX
+RUN apk add --no-cache git upx gcc musl-dev
 
 WORKDIR /build
 
@@ -17,8 +17,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build for linux amd64
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/home-tidal-flood-warning cmd/api/main.go
+# Build for linux amd64 (CGO enabled for SQLite support)
+RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -ldflags "-s -w" -o bin/home-tidal-flood-warning cmd/api/main.go
 
 # Compress with UPX
 RUN upx --best --lzma bin/home-tidal-flood-warning
