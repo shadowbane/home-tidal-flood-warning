@@ -6,7 +6,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/joho/godotenv v1.5.1
 	github.com/julienschmidt/httprouter v1.3.0
-	github.com/shadowbane/weather-alert v0.0.0
+	github.com/shadowbane/weather-alert v1.0.0
 	go.uber.org/zap v1.27.1
 	gorm.io/gorm v1.25.5
 )
@@ -25,5 +25,3 @@ require (
 	gorm.io/driver/mysql v1.5.2 // indirect
 	gorm.io/driver/sqlite v1.5.4 // indirect
 )
-
-replace github.com/shadowbane/weather-alert => ../weather-alert

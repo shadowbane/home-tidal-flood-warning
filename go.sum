@@ -23,6 +23,8 @@ github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZb
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/shadowbane/go-logger v0.1.0-alpha h1:0ydtLLRG+2volgagMsbNblarFR0ssG/krmObgB0ki8c=
 github.com/shadowbane/go-logger v0.1.0-alpha/go.mod h1:XOUzCQBPLGZ1YmUJgbOcKtgIk2bPVdb0kuvr9OsyO2s=
+github.com/shadowbane/weather-alert v1.0.0 h1:dYu9XouwMkdgW4AXI9l9NXmIkL24o6ZP58KE/5NgOO4=
+github.com/shadowbane/weather-alert v1.0.0/go.mod h1:U95B2YKmrqCKwcW9I7d0EwJn1/c7lDplILhyUT81LVY=
 github.com/stretchr/testify v1.8.1 h1:w7B6lhMri9wdJUVmEZPGGhZzrYTPvgJArz7wNPgYKsk=
 github.com/stretchr/testify v1.8.1/go.mod h1:w2LPCIKwWwSfY2zedu0+kehJoqGctiVI29o6fzry7u4=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
