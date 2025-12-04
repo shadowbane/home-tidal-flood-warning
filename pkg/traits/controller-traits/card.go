@@ -233,6 +233,46 @@ func RenderHTMLCardDark(data AlertCardData) string {
 </div>`, icon, event, province, description, riskBadge, effective, expires)
 }
 
+// RenderNoAlertCard renders a card indicating no active alerts (light mode)
+func RenderNoAlertCard(location string) string {
+	locationText := ""
+	if location != "" {
+		titleLocation := strings.Title(strings.ToLower(location))
+		locationText = " for " + html.EscapeString(titleLocation)
+	}
+
+	return fmt.Sprintf(`<div style="width:400px;border:1px solid #e5e7eb;border-radius:12px;padding:16px;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#f0fdf4 0%%,#dcfce7 100%%);box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <span style="font-size:48px;flex-shrink:0;">✅</span>
+    <div style="min-width:0;flex:1;">
+      <div style="font-size:18px;font-weight:600;color:#166534;">All Clear</div>
+      <div style="font-size:14px;color:#15803d;">No active weather alerts%s</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#64748b;margin-top:8px;line-height:1.5;">There are currently no weather warnings or alerts in effect. Stay safe and enjoy your day!</div>
+</div>`, locationText)
+}
+
+// RenderNoAlertCardDark renders a card indicating no active alerts (dark mode)
+func RenderNoAlertCardDark(location string) string {
+	locationText := ""
+	if location != "" {
+		titleLocation := strings.Title(strings.ToLower(location))
+		locationText = " for " + html.EscapeString(titleLocation)
+	}
+
+	return fmt.Sprintf(`<div style="width:400px;border:1px solid #374151;border-radius:12px;padding:16px;font-family:system-ui,-apple-system,sans-serif;background:linear-gradient(135deg,#14532d 0%%,#052e16 100%%);box-shadow:0 4px 6px -1px rgba(0,0,0,0.3);">
+  <div style="display:flex;align-items:flex-start;gap:12px;">
+    <span style="font-size:48px;flex-shrink:0;">✅</span>
+    <div style="min-width:0;flex:1;">
+      <div style="font-size:18px;font-weight:600;color:#86efac;">All Clear</div>
+      <div style="font-size:14px;color:#4ade80;">No active weather alerts%s</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.5;">There are currently no weather warnings or alerts in effect. Stay safe and enjoy your day!</div>
+</div>`, locationText)
+}
+
 // WriteHTMLResponse writes an HTML response
 func WriteHTMLResponse(w http.ResponseWriter, content string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

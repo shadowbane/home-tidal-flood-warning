@@ -241,7 +241,13 @@ func Index(app *application.Application) httprouter.Handle {
 		// Handle card format response
 		if isCardMode {
 			if len(alertDetails) == 0 {
-				basetraits.WriteErrorResponse(w, http.StatusNotFound, "no alerts found")
+				// Render "no alert" card instead of error
+				switch asCard {
+				case "html":
+					traits.WriteHTMLResponse(w, traits.RenderNoAlertCard(locationFilter))
+				case "html-dark":
+					traits.WriteHTMLResponse(w, traits.RenderNoAlertCardDark(locationFilter))
+				}
 				return
 			}
 
