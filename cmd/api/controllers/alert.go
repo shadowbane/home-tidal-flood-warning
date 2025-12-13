@@ -2,6 +2,7 @@ package controllers
 
 import (
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,6 +16,34 @@ import (
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
+
+// offsetRegex matches UTC offset formats: +08:00, -05:30, +0800, -0530
+var offsetRegex = regexp.MustCompile(`^([+-])(\d{2}):?(\d{2})$`)
+
+// parseTimezone converts a UTC offset to IANA timezone string, or returns as-is.
+// Examples: "+08:00" -> "Etc/GMT-8", "-05:00" -> "Etc/GMT+5"
+// Note: Etc/GMT signs are inverted (Etc/GMT-8 = UTC+08:00)
+// For non-offset input, returns the original string unchanged.
+func parseTimezone(tz string) string {
+	if tz == "" {
+		return tz
+	}
+
+	matches := offsetRegex.FindStringSubmatch(tz)
+	if matches == nil {
+		return tz // Not an offset, return as-is (e.g., "Asia/Singapore")
+	}
+
+	sign := matches[1]
+	hours, _ := strconv.Atoi(matches[2])
+	// minutes not used - Etc/GMT only supports whole hours
+
+	// Etc/GMT signs are inverted: +08:00 -> Etc/GMT-8
+	if sign == "+" {
+		return "Etc/GMT-" + strconv.Itoa(hours)
+	}
+	return "Etc/GMT+" + strconv.Itoa(hours)
+}
 
 // TidalFloodRisk represents the tidal flood risk assessment
 type TidalFloodRisk struct {
@@ -98,7 +127,7 @@ const tideBufferDuration = 2 * time.Hour
 // calculateTidalFloodRisk calculates the risk of tidal flooding based on alert and tide data
 // Risk conditions: heavy rain + high tide (>2.5m) where tide_time overlaps with alert period
 // Sea level rises gradually, so we add a buffer after alert expires to catch rising water scenarios
-func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *TidalFloodRisk {
+func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail, timezone string) *TidalFloodRisk {
 	// Check if alert description contains "heavy rain" or "heavy rainfall"
 	descLower := strings.ToLower(alert.Description)
 	hasHeavyRain := strings.Contains(descLower, "heavy rain")
@@ -109,6 +138,7 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 			RiskLevel: "none",
 			HeavyRain: false,
 			Message:   "No heavy rain expected",
+			TideTime:  basetraits.FormatTimeWithTimezone(time.Now().UTC(), timezone),
 		}
 	}
 
@@ -131,6 +161,7 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 			RiskLevel: "unknown",
 			HeavyRain: hasHeavyRain,
 			Message:   "Unable to determine tidal flood risk",
+			TideTime:  basetraits.FormatTimeWithTimezone(time.Now().UTC(), timezone),
 		}
 	}
 
@@ -141,6 +172,7 @@ func calculateTidalFloodRisk(db *gorm.DB, alert weathermodels.AlertDetail) *Tida
 			RiskLevel: "none",
 			HeavyRain: hasHeavyRain,
 			Message:   "No tidal flood risk: No high tide (>2.6m) during or near alert period",
+			TideTime:  basetraits.FormatTimeWithTimezone(time.Now().UTC(), timezone),
 		}
 	}
 
@@ -178,7 +210,7 @@ func Index(app *application.Application) httprouter.Handle {
 		// Parse pagination parameters
 		page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-		timezone := r.URL.Query().Get("timezone")
+		timezone := parseTimezone(r.URL.Query().Get("timezone"))
 		activeFilter := r.URL.Query().Get("active")
 		locationFilter := r.URL.Query().Get("location")
 		asCard := r.URL.Query().Get("as-card")
@@ -252,7 +284,7 @@ func Index(app *application.Application) httprouter.Handle {
 			}
 
 			// Calculate flood risk for card
-			floodRisk := calculateTidalFloodRisk(app.DB, alertDetails[0])
+			floodRisk := calculateTidalFloodRisk(app.DB, alertDetails[0], timezone)
 
 			// Convert to traits.TidalFloodRisk for card rendering
 			var cardFloodRisk *traits.TidalFloodRisk
@@ -289,7 +321,7 @@ func Index(app *application.Application) httprouter.Handle {
 		// Convert to response DTOs with tidal flood risk calculation
 		responses := make([]AlertDetailResponse, len(alertDetails))
 		for i, detail := range alertDetails {
-			floodRisk := calculateTidalFloodRisk(app.DB, detail)
+			floodRisk := calculateTidalFloodRisk(app.DB, detail, timezone)
 			responses[i] = toResponse(detail, timezone, floodRisk)
 		}
 
